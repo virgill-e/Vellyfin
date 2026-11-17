@@ -83,7 +83,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build --bundles ${{ matrix.bundles }}
       # Builds non signés : artefacts de test, conservés 14 jours.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           retention-days: 14
