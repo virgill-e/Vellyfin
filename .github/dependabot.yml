@@ -1,9 +1,11 @@
+# Mises à jour mensuelles et groupées : limite le nombre de PR et de passages de CI.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
@@ -11,7 +13,8 @@ updates:
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
       cargo-minor-patch:
         update-types: [minor, patch]
@@ -19,4 +22,5 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
