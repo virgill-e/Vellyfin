@@ -1,4 +1,4 @@
-import { defineStore } from "pinia";
+import { acceptHMRUpdate, defineStore } from "pinia";
 import { computed, shallowRef, ref } from "vue";
 import { Jellyfin, type Api } from "@jellyfin/sdk";
 import type { UserDto } from "@jellyfin/sdk/lib/generated-client/models";
@@ -194,3 +194,6 @@ export const useSessionStore = defineStore("session", () => {
     logout,
   };
 });
+
+// Développement : remplace le store à chaud au lieu de garder une version périmée.
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useSessionStore, import.meta.hot));

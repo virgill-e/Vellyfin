@@ -3,7 +3,7 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 
 defineProps<{ title: string; items: BaseItemDto[]; landscape?: boolean }>();
-defineEmits<{ download: [item: BaseItemDto] }>();
+defineEmits<{ error: [message: string] }>();
 
 const track = ref<HTMLElement | null>(null);
 
@@ -30,7 +30,7 @@ function scroll(direction: 1 | -1) {
           :key="item.Id"
           :item="item"
           :landscape="landscape"
-          @download="$emit('download', $event)"
+          @error="$emit('error', $event)"
         />
       </div>
       <button

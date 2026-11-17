@@ -3,7 +3,13 @@
 import Hls from "hls.js";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { detectCodecs } from "~/utils/device-profile";
-import { negotiatePlayback, stopEncoding, type PlaybackSource } from "~/utils/playback";
+import {
+  describeTranscoding,
+  fetchTranscodingInfo,
+  negotiatePlayback,
+  stopEncoding,
+  type PlaybackSource,
+} from "~/utils/playback";
 
 definePageMeta({ public: true });
 
@@ -18,7 +24,21 @@ const source = ref<PlaybackSource | null>(null);
 const title = ref("");
 const error = ref("");
 const codecs = detectCodecs();
+const streamInfo = ref("Analyse du flux…");
 let hls: Hls | null = null;
+let infoTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Interroge la session Jellyfin jusqu'à connaître l'état du flux (copie ou transcodage). */
+function watchTranscoding(attempt = 0) {
+  infoTimer = setTimeout(async () => {
+    const api = session.api;
+    if (!api) return;
+    const info = await fetchTranscodingInfo(api).catch(() => null);
+    if (info) streamInfo.value = describeTranscoding(info);
+    else if (attempt < 5) watchTranscoding(attempt + 1);
+    else streamInfo.value = "État du flux indisponible";
+  }, 3000);
+}
 
 onMounted(async () => {
   try {
@@ -30,6 +50,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(async () => {
+  if (infoTimer) clearTimeout(infoTimer);
   hls?.destroy();
   const api = session.api;
   if (api && source.value) await stopEncoding(api, source.value.playSessionId).catch(() => {});
@@ -67,6 +88,7 @@ async function playStream() {
     throw new Error("Ce système ne sait pas lire le HLS.");
   }
   await el.play().catch(() => {});
+  watchTranscoding();
 }
 
 const supported = Object.entries(codecs)
@@ -82,9 +104,7 @@ const supported = Object.entries(codecs)
       <span class="truncate font-medium">{{ title }}</span>
       <span class="ml-auto text-zinc-500">
         {{ offline ? "Hors ligne" : "Streaming" }} · codecs WebView : {{ supported || "aucun" }}
-        <template v-if="source">
-          · {{ source.transcodeReasons.length ? source.transcodeReasons.join(", ") : "aucune conversion" }}
-        </template>
+        <template v-if="source"> · {{ streamInfo }}</template>
       </span>
     </header>
 

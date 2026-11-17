@@ -62,13 +62,8 @@ onMounted(async () => {
   }
 });
 
-async function download(item: BaseItemDto) {
-  if (!item.Id) return;
-  try {
-    await downloads.start(item.Id, item.Name ?? item.Id);
-  } catch (e) {
-    error.value = `Téléchargement impossible : ${e instanceof Error ? e.message : e}`;
-  }
+function showError(message: string) {
+  error.value = message;
 }
 </script>
 
@@ -76,7 +71,7 @@ async function download(item: BaseItemDto) {
   <div class="min-h-screen pb-16">
     <AppHeader />
 
-    <HeroBanner v-if="heroes.length" :items="heroes" @download="download" />
+    <HeroBanner v-if="heroes.length" :items="heroes" @error="showError" />
     <div v-else class="h-28" />
 
     <p v-if="error" role="alert" class="mx-6 mb-6 rounded bg-zinc-800 px-4 py-3 text-sm text-zinc-200 sm:mx-12">
@@ -85,10 +80,10 @@ async function download(item: BaseItemDto) {
     </p>
 
     <div class="relative z-10 flex flex-col gap-6" :class="heroes.length ? '-mt-32' : ''">
-      <MediaRow title="Reprendre la lecture" :items="resume" landscape @download="download" />
+      <MediaRow title="Reprendre la lecture" :items="resume" landscape @error="showError" />
       <LibraryRow />
-      <MediaRow title="Films ajoutés récemment" :items="movies" @download="download" />
-      <MediaRow title="Séries mises à jour" :items="shows" @download="download" />
+      <MediaRow title="Films ajoutés récemment" :items="movies" @error="showError" />
+      <MediaRow title="Séries mises à jour" :items="shows" @error="showError" />
     </div>
 
     <p v-if="loading" class="px-12 text-zinc-500">Chargement…</p>

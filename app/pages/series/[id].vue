@@ -66,14 +66,8 @@ function runtime(ticks?: number | null) {
   return ticks ? `${Math.round(ticks / 600_000_000)} min` : "";
 }
 
-async function download(item: BaseItemDto) {
-  if (!item.Id) return;
-  const name = `${series.value?.Name ?? ""} · S${item.ParentIndexNumber ?? "?"}É${item.IndexNumber ?? "?"} · ${item.Name ?? ""}`;
-  try {
-    await downloads.start(item.Id, name);
-  } catch (e) {
-    error.value = `Téléchargement impossible : ${e instanceof Error ? e.message : e}`;
-  }
+function episodeName(ep: BaseItemDto) {
+  return `${series.value?.Name ?? ""} · S${ep.ParentIndexNumber ?? "?"}É${ep.IndexNumber ?? "?"} · ${ep.Name ?? ""}`;
 }
 </script>
 
@@ -127,14 +121,13 @@ async function download(item: BaseItemDto) {
             <p v-if="ep.Overview" class="line-clamp-2 text-sm text-zinc-400">{{ ep.Overview }}</p>
           </div>
 
-          <button
-            class="grid size-10 shrink-0 place-items-center rounded-full border-2 border-white/50 text-white transition hover:border-white disabled:opacity-60"
-            :aria-label="downloads.statusOf(ep.Id!) === 'completed' ? 'Téléchargé' : 'Télécharger'"
-            :disabled="downloads.statusOf(ep.Id!) !== null && downloads.statusOf(ep.Id!) !== 'failed'"
-            @click="download(ep)"
-          >
-            <DownloadIcon :status="downloads.statusOf(ep.Id!)" />
-          </button>
+          <DownloadButton
+            class="shrink-0"
+            :item-id="ep.Id!"
+            :name="episodeName(ep)"
+            :image-url="posterUrl(base, ep, 480)"
+            @error="error = $event"
+          />
         </li>
       </ol>
     </section>

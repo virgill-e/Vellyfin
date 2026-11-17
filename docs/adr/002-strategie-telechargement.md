@@ -28,7 +28,14 @@ Les routes HLS dynamiques (`/Videos/{id}/master.m3u8`, `main.m3u8`, segments) et
 
 ## Points à valider en phase 0
 
-- Jellyfin accepte que les segments soient demandés plus vite que la lecture (limitation des transcodages, arrêt du job sans activité).
-- Reprise au segment N : Jellyfin relance le transcodage à cette position ; vérifier la continuité des timestamps dans le fichier concaténé.
-- Le `.mp4` concaténé est lisible et navigable dans WKWebView et WebView2.
-- Durée totale et taille annoncées pour estimer l'espace disque (pas de taille exacte avant la fin d'un transcodage).
+| Point | macOS | Windows |
+|---|---|---|
+| Remux sans transcodage vidéo (source HEVC/MKV) | ✅ Session Jellyfin : « Vidéo copiée (hevc) · Audio copié (eac3) » | — |
+| Segments demandés plus vite que la lecture (pas de blocage par la limitation des transcodages) | ✅ Téléchargements menés à terme | — |
+| Reprise après interruption (annulation, coupure réseau courte, redémarrage de l'app) | ✅ Reprend aux segments déjà reçus | — |
+| Continuité des timestamps au point de reprise dans le fichier concaténé | ✅ Lecture hors ligne sans défaut signalé | — |
+| `.mp4` concaténé lisible et navigable (déplacement dans la vidéo) | ✅ | — |
+| Sous-titres texte en streaming (WebVTT externe) | ✅ | — |
+| Estimation de la taille et du temps restant | ✅ Extrapolée depuis les segments reçus (taille exacte inconnue avant la fin) | — |
+
+**macOS : phase 0 validée (2026-11-17).** Le statut passera à « accepté » après validation sur Windows.

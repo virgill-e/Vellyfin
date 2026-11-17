@@ -49,3 +49,25 @@ describe("transcodeReasons", () => {
     expect(transcodeReasons("/videos/x/master.m3u8?a=1")).toEqual([]);
   });
 });
+
+describe("describeTranscoding", () => {
+  it("signale une vidéo copiée (remux)", async () => {
+    const { describeTranscoding } = await import("../../app/utils/playback");
+    expect(
+      describeTranscoding({ IsVideoDirect: true, IsAudioDirect: false, VideoCodec: "hevc", AudioCodec: "aac" }),
+    ).toBe("Vidéo copiée (hevc) · Audio transcodé (aac)");
+  });
+
+  it("signale un transcodage vidéo et l'accélération matérielle", async () => {
+    const { describeTranscoding } = await import("../../app/utils/playback");
+    expect(
+      describeTranscoding({
+        IsVideoDirect: false,
+        IsAudioDirect: true,
+        VideoCodec: "h264",
+        AudioCodec: "aac",
+        HardwareAccelerationType: "vaapi",
+      }),
+    ).toBe("Vidéo transcodée (h264) · Audio copié (aac) · VAAPI");
+  });
+});

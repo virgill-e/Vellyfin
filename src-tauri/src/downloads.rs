@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -62,6 +62,9 @@ pub struct DownloadRequest {
     pub authorization: String,
     /// Paramètres de qualité : une reprise n'est possible qu'avec les mêmes.
     pub variant: String,
+    /// Vignette à conserver avec le téléchargement (affichage hors ligne).
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -83,6 +86,9 @@ pub struct Progress {
     done: usize,
     total: usize,
     bytes: u64,
+    /// Octets réellement reçus depuis le démarrage de cette session
+    /// (hors segments déjà présents) : sert au calcul du débit.
+    downloaded: u64,
     error: Option<String>,
 }
 
@@ -99,6 +105,9 @@ pub struct DownloadMeta {
     pub variant: String,
     /// Chemin absolu du fichier lisible, une fois terminé.
     pub file: Option<String>,
+    /// Chemin absolu de la vignette locale, si elle a pu être récupérée.
+    #[serde(default)]
+    pub image: Option<String>,
 }
 
 fn is_safe_id(id: &str) -> bool {
@@ -165,6 +174,7 @@ pub async fn download_start(
             request,
             dir,
             cancel: flag,
+            received: AtomicU64::new(0),
         };
         job.emit(DownloadState::Queued, 0, 0, 0, None);
 
@@ -257,6 +267,8 @@ struct Job {
     request: DownloadRequest,
     dir: PathBuf,
     cancel: Arc<AtomicBool>,
+    /// Octets reçus du réseau pendant cette session.
+    received: AtomicU64,
 }
 
 impl Job {
@@ -278,6 +290,7 @@ impl Job {
             done,
             total,
             bytes,
+            downloaded: self.received.load(Ordering::Relaxed),
             error,
         };
         let _ = self.app.emit(EVENT, progress);
@@ -293,6 +306,29 @@ impl Job {
             segments,
             variant: self.request.variant.clone(),
             file,
+            image: self
+                .image_path()
+                .exists()
+                .then(|| self.image_path().to_string_lossy().into_owned()),
+        }
+    }
+
+    fn image_path(&self) -> PathBuf {
+        self.dir.join("image.jpg")
+    }
+
+    /// Récupère la vignette (meilleur effort : un échec ne bloque pas le téléchargement).
+    async fn fetch_image(&self) {
+        let Some(url) = self
+            .request
+            .image_url
+            .as_deref()
+            .and_then(|u| Url::parse(u).ok())
+        else {
+            return;
+        };
+        if let Err(e) = self.fetch_to(&url, &self.image_path()).await {
+            log::warn!("vignette de {} : {e}", self.request.item_id);
         }
     }
 
@@ -330,6 +366,7 @@ impl Job {
         tokio::fs::create_dir_all(&parts)
             .await
             .map_err(|e| e.to_string())?;
+        self.fetch_image().await;
         write_meta(
             &self.dir,
             &self.meta(DownloadState::Downloading, total, None),
@@ -424,6 +461,8 @@ impl Job {
             }
             let chunk = chunk.map_err(|e| e.to_string())?;
             size += chunk.len() as u64;
+            self.received
+                .fetch_add(chunk.len() as u64, Ordering::Relaxed);
             file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         }
         file.flush().await.map_err(|e| e.to_string())?;

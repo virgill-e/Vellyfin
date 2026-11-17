@@ -16,6 +16,8 @@ export interface DownloadProgress {
   done: number;
   total: number;
   bytes: number;
+  /** Octets réellement reçus depuis le démarrage (hors segments déjà présents). */
+  downloaded: number;
   error: string | null;
 }
 
@@ -26,7 +28,11 @@ export interface DownloadMeta {
   name: string;
   state: DownloadState;
   segments: number;
+  /** Qualité utilisée (ex. bitrate=original) : une reprise doit la réutiliser. */
+  variant: string;
   file: string | null;
+  /** Vignette enregistrée localement (disponible hors ligne). */
+  image: string | null;
 }
 
 export interface DownloadRequest {
@@ -38,6 +44,8 @@ export interface DownloadRequest {
   authorization: string;
   /** Paramètres de qualité ; une reprise n'est possible qu'avec les mêmes. */
   variant: string;
+  /** Vignette à enregistrer avec le téléchargement. */
+  imageUrl?: string;
 }
 
 export const native = {

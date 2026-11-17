@@ -6,7 +6,7 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { posterUrl, thumbUrl } from "~/utils/images";
 
 const props = defineProps<{ item: BaseItemDto; landscape?: boolean; fluid?: boolean }>();
-defineEmits<{ download: [item: BaseItemDto] }>();
+defineEmits<{ error: [message: string] }>();
 
 const session = useSessionStore();
 const downloads = useDownloadsStore();
@@ -19,6 +19,7 @@ const image = computed(() => {
   return props.landscape ? thumbUrl(base, props.item) : posterUrl(base, props.item);
 });
 const status = computed(() => (props.item.Id ? downloads.statusOf(props.item.Id) : null));
+const downloadImage = computed(() => (session.api ? thumbUrl(session.api.basePath, props.item) : undefined));
 const progress = computed(() => props.item.UserData?.PlayedPercentage ?? 0);
 const unplayed = computed(() => (isSeries.value ? props.item.UserData?.UnplayedItemCount ?? 0 : 0));
 const subtitle = computed(() => {
@@ -51,11 +52,11 @@ const width = computed(() => {
       </span>
 
       <span
-        v-if="status === 'completed'"
-        class="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-full bg-black/70"
-        title="Disponible hors ligne"
+        v-if="status && status !== 'failed'"
+        class="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-full bg-black/75"
+        :title="status === 'completed' ? 'Disponible hors ligne' : 'Téléchargement en cours'"
       >
-        <DownloadIcon status="completed" />
+        <DownloadIcon :status="status" :progress="item.Id ? downloads.progressOf(item.Id) : null" />
       </span>
       <span
         v-else-if="unplayed > 0"
@@ -85,15 +86,12 @@ const width = computed(() => {
         >
           <svg viewBox="0 0 24 24" class="size-5 fill-current" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
         </NuxtLink>
-        <button
-          class="grid size-11 place-items-center rounded-full border-2 border-white/70 bg-black/40 text-white transition hover:scale-110 hover:border-white disabled:opacity-60"
-          :aria-label="status === 'completed' ? 'Téléchargé' : 'Télécharger'"
-          :title="status === 'completed' ? 'Téléchargé' : status ? 'Téléchargement en cours' : 'Télécharger'"
-          :disabled="status !== null && status !== 'failed'"
-          @click="$emit('download', item)"
-        >
-          <DownloadIcon :status="status" />
-        </button>
+        <DownloadButton
+          :item-id="item.Id!"
+          :name="item.Name ?? item.Id!"
+          :image-url="downloadImage"
+          @error="$emit('error', $event)"
+        />
       </div>
 
       <div v-if="progress > 0" class="absolute inset-x-0 bottom-0 h-1 bg-zinc-600/80">

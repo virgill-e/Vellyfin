@@ -1,8 +1,9 @@
 // Négociation de lecture avec Jellyfin : PlaybackInfo + profil d'appareil
 // → URL HLS (remux ou transcodage) et sous-titres WebVTT.
 import type { Api } from "@jellyfin/sdk";
-import type { MediaStream } from "@jellyfin/sdk/lib/generated-client/models";
+import type { MediaStream, TranscodingInfo } from "@jellyfin/sdk/lib/generated-client/models";
 import { getMediaInfoApi } from "@jellyfin/sdk/lib/utils/api/media-info-api";
+import { getSessionApi } from "@jellyfin/sdk/lib/utils/api/session-api";
 import { buildDeviceProfile, detectCodecs } from "./device-profile";
 
 export interface PlaybackOptions {
@@ -19,7 +20,11 @@ export interface PlaybackSource {
   mediaSourceId: string;
   /** URL absolue de la playlist HLS. */
   playlistUrl: string;
-  /** Raisons données par Jellyfin (ex. ContainerNotSupported = simple remux). */
+  /**
+   * Raisons données par Jellyfin. Contient toujours « DirectPlayError » : Vellyfin
+   * désactive volontairement la lecture directe pour tout faire passer par HLS.
+   * Pour savoir si la vidéo est copiée, voir {@link describeTranscoding}.
+   */
   transcodeReasons: string[];
   textSubtitles: { index: number; label: string; language?: string; url: string }[];
   audioStreams: MediaStream[];
@@ -89,4 +94,26 @@ export function transcodeReasons(url: string): string[] {
   const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
   const value = new URLSearchParams(query).get("TranscodeReasons");
   return value ? value.split(",").filter(Boolean) : [];
+}
+
+/**
+ * État réel du flux côté serveur (copie ou transcodage), lu dans la session
+ * Jellyfin de cet appareil. Disponible quelques secondes après le début du flux.
+ */
+export async function fetchTranscodingInfo(api: Api): Promise<TranscodingInfo | null> {
+  const { data } = await getSessionApi(api).getSessions({ deviceId: api.deviceInfo.id });
+  return data.find((s) => s.TranscodingInfo)?.TranscodingInfo ?? null;
+}
+
+/** Résumé lisible : « Vidéo copiée (hevc) · Audio transcodé (aac) · VAAPI ». */
+export function describeTranscoding(info: TranscodingInfo): string {
+  const video = info.IsVideoDirect ? "Vidéo copiée" : "Vidéo transcodée";
+  const audio = info.IsAudioDirect ? "Audio copié" : "Audio transcodé";
+  const parts = [
+    `${video}${info.VideoCodec ? ` (${info.VideoCodec})` : ""}`,
+    `${audio}${info.AudioCodec ? ` (${info.AudioCodec})` : ""}`,
+  ];
+  const hw = info.HardwareAccelerationType;
+  if (!info.IsVideoDirect && hw && hw !== "none") parts.push(hw.toUpperCase());
+  return parts.join(" · ");
 }

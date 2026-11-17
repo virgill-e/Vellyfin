@@ -4,15 +4,14 @@
 // pause ; si le système demande de réduire les animations, les fondus sont
 // désactivés mais la rotation continue.
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
-import { backdropUrl } from "~/utils/images";
+import { backdropUrl, thumbUrl } from "~/utils/images";
 
 const ROTATION_MS = 9000;
 
 const props = defineProps<{ items: BaseItemDto[] }>();
-defineEmits<{ download: [item: BaseItemDto] }>();
+defineEmits<{ error: [message: string] }>();
 
 const session = useSessionStore();
-const downloads = useDownloadsStore();
 
 const { index, paused, go } = useRotation(
   computed(() => props.items.length),
@@ -20,7 +19,6 @@ const { index, paused, go } = useRotation(
 );
 
 const current = computed(() => props.items[index.value] ?? props.items[0]);
-const status = computed(() => (current.value?.Id ? downloads.statusOf(current.value.Id) : null));
 const meta = computed(() =>
   current.value
     ? [current.value.ProductionYear, current.value.OfficialRating, runtime(current.value.RunTimeTicks)]
@@ -83,14 +81,13 @@ function runtime(ticks?: number | null) {
             <svg viewBox="0 0 24 24" class="size-6 fill-current" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
             Lecture
           </NuxtLink>
-          <button
-            class="btn-secondary"
-            :disabled="status !== null && status !== 'failed'"
-            @click="$emit('download', current)"
-          >
-            <DownloadIcon :status="status" />
-            {{ status === "completed" ? "Téléchargé" : status ? "En cours…" : "Télécharger" }}
-          </button>
+          <DownloadButton
+            variant="wide"
+            :item-id="current.Id!"
+            :name="current.Name ?? current.Id!"
+            :image-url="session.api ? thumbUrl(session.api.basePath, current) : undefined"
+            @error="$emit('error', $event)"
+          />
         </div>
       </div>
     </Transition>

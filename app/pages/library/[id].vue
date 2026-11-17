@@ -85,13 +85,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => observer?.disconnect());
 
-async function download(item: BaseItemDto) {
-  if (!item.Id) return;
-  try {
-    await downloads.start(item.Id, item.Name ?? item.Id);
-  } catch (e) {
-    error.value = `Téléchargement impossible : ${e instanceof Error ? e.message : e}`;
-  }
+function showError(message: string) {
+  error.value = message;
 }
 </script>
 
@@ -122,7 +117,7 @@ async function download(item: BaseItemDto) {
 
     <ul class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-3 gap-y-6 px-6 sm:px-12 md:grid-cols-[repeat(auto-fill,minmax(176px,1fr))]">
       <li v-for="item in items" :key="item.Id">
-        <MediaCard :item="item" fluid @download="download" />
+        <MediaCard :item="item" fluid @error="showError" />
       </li>
     </ul>
 

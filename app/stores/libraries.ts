@@ -1,4 +1,4 @@
-import { defineStore } from "pinia";
+import { acceptHMRUpdate, defineStore } from "pinia";
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { getUserViewApi } from "@jellyfin/sdk/lib/utils/api/user-view-api";
 
@@ -36,3 +36,6 @@ export const useLibrariesStore = defineStore("libraries", () => {
 
   return { items, load, byId, reset };
 });
+
+// Développement : remplace le store à chaud au lieu de garder une version périmée.
+if (import.meta.hot) import.meta.hot.accept(acceptHMRUpdate(useLibrariesStore, import.meta.hot));
