@@ -3,8 +3,10 @@
 // avec vignettes enregistrées localement (visibles sans réseau).
 import { QUALITIES, bitrateOfVariant } from "~/utils/quality";
 import { formatRemaining, formatSpeed } from "~/utils/eta";
+import { MAX_RESUME_PCT } from "~/utils/progress";
 
 const downloads = useDownloadsStore();
+const progress = useProgressStore();
 
 onMounted(() => downloads.init());
 
@@ -44,6 +46,14 @@ function qualityLabel(variant: string) {
 
 function localImage(itemId: string) {
   return downloads.saved.find((d) => d.itemId === itemId)?.image ?? null;
+}
+
+/** Avancement de lecture sur cet appareil (0-100), 0 si non commencé ou terminé. */
+function watched(itemId: string) {
+  const entry = progress.local(itemId);
+  if (!entry?.durationTicks) return 0;
+  const pct = (entry.positionTicks / entry.durationTicks) * 100;
+  return pct < MAX_RESUME_PCT ? pct : 0;
 }
 
 function percent(done: number, total: number) {
@@ -145,6 +155,9 @@ const STATE_LABEL: Record<string, string> = {
                   <span class="grid size-10 place-items-center rounded-full border-2 border-white bg-black/50">
                     <svg viewBox="0 0 24 24" class="size-4 fill-white" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
                   </span>
+                </span>
+                <span v-if="watched(d.itemId) > 0" class="absolute inset-x-0 bottom-0 h-1 bg-zinc-600/80">
+                  <span class="block h-full bg-accent" :style="{ width: `${watched(d.itemId)}%` }" />
                 </span>
               </DownloadThumb>
             </NuxtLink>

@@ -21,6 +21,7 @@ const image = computed(() => {
 const status = computed(() => (props.item.Id ? downloads.statusOf(props.item.Id) : null));
 const downloadImage = computed(() => (session.api ? thumbUrl(session.api.basePath, props.item) : undefined));
 const progress = computed(() => props.item.UserData?.PlayedPercentage ?? 0);
+const played = computed(() => !isSeries.value && props.item.UserData?.Played === true);
 const unplayed = computed(() => (isSeries.value ? props.item.UserData?.UnplayedItemCount ?? 0 : 0));
 const subtitle = computed(() => {
   if (props.item.Type === "Episode") {
@@ -64,6 +65,16 @@ const width = computed(() => {
         :title="`${unplayed} épisode(s) non vu(s)`"
       >
         {{ unplayed }}
+      </span>
+      <span
+        v-else-if="played"
+        class="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-full bg-black/75"
+        title="Vu"
+      >
+        <svg viewBox="0 0 24 24" class="size-4 fill-none stroke-white stroke-[3]" aria-hidden="true">
+          <path d="m5 12 5 5 9-10" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="sr-only">Vu</span>
       </span>
 
       <!-- Actions au survol -->

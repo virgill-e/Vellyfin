@@ -5,6 +5,7 @@ import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api/library-api";
 
 const session = useSessionStore();
 const downloads = useDownloadsStore();
+const progress = useProgressStore();
 
 const libraries = useLibrariesStore();
 const resume = ref<BaseItemDto[]>([]);
@@ -17,7 +18,8 @@ const loading = ref(true);
 const heroes = computed(() => movies.value.filter((m) => m.BackdropImageTags?.length).slice(0, 6));
 
 onMounted(async () => {
-  await Promise.all([downloads.init(), libraries.load()]);
+  // Positions vues hors ligne envoyées d'abord : « Reprendre » est alors à jour.
+  await Promise.all([downloads.init(), libraries.load(), progress.flush()]);
   const api = session.api;
   const userId = session.session?.userId;
   if (!api || !userId) return;

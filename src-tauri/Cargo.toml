@@ -1,6 +1,6 @@
 [package]
 name = "vellyfin"
-version = "0.2.0"
+version = "0.2.1"
 description = "Client Jellyfin desktop avec lecture hors ligne"
 authors = ["Vellyfin contributors"]
 license = "MIT"
