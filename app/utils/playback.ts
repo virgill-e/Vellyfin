@@ -33,6 +33,8 @@ export interface PlaybackSource {
   audioTracks: AudioTrack[];
   /** Index de la piste audio présente dans le flux, ou null si inconnue. */
   audioIndex: number | null;
+  /** Sous-titres à afficher par défaut selon les préférences Jellyfin, ou null. */
+  defaultSubtitleIndex: number | null;
 }
 
 export interface AudioTrack {
@@ -103,6 +105,10 @@ export async function negotiatePlayback(
     textSubtitles,
     audioTracks: audioTracks(streams),
     audioIndex,
+    defaultSubtitleIndex:
+      source.DefaultSubtitleStreamIndex != null && source.DefaultSubtitleStreamIndex >= 0
+        ? source.DefaultSubtitleStreamIndex
+        : null,
   };
 }
 

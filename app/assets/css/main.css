@@ -56,3 +56,15 @@ body {
 @utility auth-button {
   @apply mt-2 w-full rounded bg-accent py-3.5 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60;
 }
+
+/* Lecteur : boutons ronds discrets et sous-titres lisibles. */
+@utility player-icon {
+  @apply grid size-11 place-items-center rounded-full text-white/90 transition hover:scale-110 hover:text-white focus-visible:outline-2 focus-visible:outline-white;
+}
+
+video::cue {
+  background: rgb(0 0 0 / 0.55);
+  color: white;
+  font-size: 1.15em;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+}
