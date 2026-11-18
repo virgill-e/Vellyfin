@@ -9,6 +9,7 @@ import { MAX_RESUME_PCT } from "~/utils/progress";
 
 const downloads = useDownloadsStore();
 const progress = useProgressStore();
+const connectivity = useConnectivityStore();
 
 onMounted(async () => {
   await downloads.init();
@@ -95,15 +96,25 @@ const STATE_LABEL: Record<string, string> = {
             {{ formatSize(downloads.usage.used) }} utilisés · {{ formatSize(downloads.usage.free) }} libres
           </p>
         </div>
-        <label class="flex items-center gap-3 text-sm text-zinc-400">
-          Qualité
-          <select v-model="downloads.quality" class="field py-1.5">
-            <option v-for="(q, i) in QUALITIES" :key="q.label" :value="i">{{ q.label }}</option>
-          </select>
-        </label>
+        <div class="flex flex-col items-end gap-2">
+          <label class="flex items-center gap-3 text-sm text-zinc-400">
+            Qualité
+            <select v-model="downloads.quality" class="field py-1.5">
+              <option v-for="(q, i) in QUALITIES" :key="q.label" :value="i">{{ q.label }}</option>
+            </select>
+          </label>
+          <label class="flex items-center gap-2 text-sm text-zinc-400" title="Libère de la place : un épisode est supprimé dès que tu l'as regardé jusqu'au générique. Les films sont conservés.">
+            <input v-model="downloads.autoDelete" type="checkbox" class="size-4 accent-accent" />
+            Supprimer les épisodes vus
+          </label>
+        </div>
       </div>
 
       <p v-if="error" role="alert" class="mb-6 rounded bg-zinc-800 px-4 py-3 text-sm text-amber-300">{{ error }}</p>
+      <p v-if="connectivity.offline" role="status" class="mb-6 rounded bg-zinc-800 px-4 py-3 text-sm text-zinc-300">
+        Serveur injoignable : tes téléchargements restent lisibles. La file d'attente et la synchronisation reprendront
+        au retour du réseau.
+      </p>
 
       <!-- File d'attente -->
       <section v-if="downloads.queue.length" class="mb-12">

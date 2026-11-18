@@ -13,6 +13,9 @@ const username = ref("");
 const password = ref("");
 const error = ref("");
 const pending = ref(false);
+const route = useRoute();
+/** Jeton révoqué pendant une période hors ligne. */
+const expired = route.query.expired === "1";
 
 // Quick Connect : code à valider depuis un appareil déjà connecté (aucun mot de passe saisi ici).
 const quickAvailable = ref(false);
@@ -115,6 +118,13 @@ async function changeServer() {
 
 <template>
   <AuthBackdrop :server-url="server?.url">
+    <p
+      v-if="expired"
+      role="alert"
+      class="absolute left-1/2 top-8 z-20 w-[min(32rem,90vw)] -translate-x-1/2 rounded bg-zinc-900/95 px-4 py-3 text-center text-sm text-zinc-200"
+    >
+      Ta session a expiré sur le serveur. Reconnecte-toi : tes téléchargements sont conservés.
+    </p>
     <!-- Quick Connect -->
     <section v-if="quickCode !== null" class="auth-card items-center text-center">
       <h1 class="text-3xl font-bold">Quick Connect</h1>

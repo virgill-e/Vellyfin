@@ -190,7 +190,8 @@ export const useSessionStore = defineStore("session", () => {
 
     const restored = (await client()).createApi(stored.serverUrl, token);
     try {
-      await getUserApi(restored).getCurrentUser();
+      // Délai court : un serveur injoignable ne doit pas retarder le démarrage hors ligne.
+      await getUserApi(restored).getCurrentUser({ timeout: 5000 });
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } }).response?.status;
       if (status === 401 || status === 403) {
@@ -204,6 +205,26 @@ export const useSessionStore = defineStore("session", () => {
     api.value = restored;
     session.value = stored;
     return true;
+  }
+
+  /**
+   * Au retour du réseau : le jeton est-il toujours valide ? S'il a été révoqué
+   * (déconnexion à distance, mot de passe changé), la session locale est fermée.
+   */
+  async function verify(): Promise<"valid" | "expired" | "unreachable"> {
+    const current = session.value;
+    if (!api.value || !current) return "expired";
+    try {
+      await getUserApi(api.value).getCurrentUser({ timeout: 5000 });
+      return "valid";
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } }).response?.status;
+      if (status !== 401 && status !== 403) return "unreachable";
+      await native.tokenDelete(current.serverId, current.userId);
+      api.value = null;
+      persistSession(null);
+      return "expired";
+    }
   }
 
   /** Déconnexion : révoque le jeton, garde le serveur pour la prochaine connexion. */
@@ -232,6 +253,7 @@ export const useSessionStore = defineStore("session", () => {
     quickConnectStart,
     quickConnectPoll,
     restore,
+    verify,
     logout,
   };
 });

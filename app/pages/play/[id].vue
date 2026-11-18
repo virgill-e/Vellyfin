@@ -10,7 +10,7 @@ import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api/library-api";
 import { getMediaSegmentApi } from "@jellyfin/sdk/lib/utils/api/media-segment-api";
 import { getShowApi } from "@jellyfin/sdk/lib/utils/api/show-api";
 import { getUserDataApi } from "@jellyfin/sdk/lib/utils/api/user-data-api";
-import { formatClock, pickResume, type ServerPosition } from "~/utils/progress";
+import { formatClock, pickResume, resumeState, type ServerPosition } from "~/utils/progress";
 import { detectCodecs } from "~/utils/device-profile";
 import {
   describeTranscoding,
@@ -153,7 +153,20 @@ onBeforeUnmount(async () => {
   await finishing;
   const api = session.api;
   if (api && source.value) await stopEncoding(api, source.value.playSessionId).catch(() => {});
+  await cleanupIfWatched();
 });
+
+/** Option « supprimer les épisodes vus » : le fichier est libéré avant d'être supprimé. */
+async function cleanupIfWatched() {
+  const entry = progress.local(itemId);
+  if (!downloads.autoDelete || !entry || !resumeState(entry.positionTicks, entry.durationTicks)?.played) return;
+  const el = video.value;
+  if (el && offline) {
+    el.removeAttribute("src");
+    el.load();
+  }
+  await downloads.cleanupWatched(itemId).catch(() => {});
+}
 
 // Le plein écran est gardé d'un épisode à l'autre, quitté en sortant du lecteur.
 onBeforeRouteLeave((to) => {

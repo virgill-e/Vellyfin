@@ -14,6 +14,7 @@ import { pickAudio } from "~/utils/downloads";
 const QUALITY_KEY = "vellyfin.download-quality";
 const QUEUE_KEY = "vellyfin.download-queue";
 const AUDIO_KEY = "vellyfin.download-audio";
+const AUTO_DELETE_KEY = "vellyfin.download-auto-delete";
 const FINISHED = new Set(["completed", "failed", "cancelled"]);
 
 /**
@@ -64,6 +65,9 @@ export const useDownloadsStore = defineStore("downloads", () => {
   /** Langue audio préférée pour les téléchargements (code « fre », « eng »…). */
   const preferredAudio = ref<string | null>(localStorage.getItem(AUDIO_KEY));
   const usage = ref<DownloadUsage | null>(null);
+  /** Supprimer un épisode téléchargé une fois vu (films jamais concernés). */
+  const autoDelete = ref(localStorage.getItem(AUTO_DELETE_KEY) === "1");
+  const connectivity = useConnectivityStore();
   /** Élément en cours de téléchargement côté Rust. */
   const current = ref<string | null>(null);
   /** Demande en attente de confirmation (choix de la langue, espace disque). */
@@ -75,6 +79,7 @@ export const useDownloadsStore = defineStore("downloads", () => {
   watch(quality, (value) => localStorage.setItem(QUALITY_KEY, String(value)));
   watch(preferredAudio, (value) => (value ? localStorage.setItem(AUDIO_KEY, value) : localStorage.removeItem(AUDIO_KEY)));
   watch(queue, (value) => localStorage.setItem(QUEUE_KEY, JSON.stringify(value)), { deep: true });
+  watch(autoDelete, (value) => localStorage.setItem(AUTO_DELETE_KEY, value ? "1" : "0"));
 
   /** File du compte connecté (les autres comptes gardent la leur). */
   const myQueue = computed(() =>
@@ -185,7 +190,7 @@ export const useDownloadsStore = defineStore("downloads", () => {
 
   /** Lance le premier élément en attente si rien n'est en cours. */
   async function process() {
-    if (current.value || !session.api) return;
+    if (current.value || !session.api || connectivity.offline) return;
     const entry = myQueue.value.find((e) => !e.paused && !e.error);
     if (!entry) return;
     current.value = entry.itemId;
@@ -301,6 +306,21 @@ export const useDownloadsStore = defineStore("downloads", () => {
     queue.value = queue.value.filter((e) => e.itemId !== itemId);
   }
 
+  /** Retour du réseau : relance les éléments arrêtés par une erreur (souvent la coupure). */
+  function retryFailed() {
+    for (const entry of myQueue.value) entry.error = null;
+    void process();
+  }
+
+  /** Épisode téléchargé et vu : supprimé si l'option est active. Retourne vrai si supprimé. */
+  async function cleanupWatched(itemId: string): Promise<boolean> {
+    if (!autoDelete.value) return false;
+    const meta = saved.value.find((d) => d.itemId === itemId && d.state === "completed");
+    if (!meta || meta.info?.kind !== "Episode") return false;
+    await remove(meta);
+    return true;
+  }
+
   /** Déplace un élément d'un cran dans la file (-1 = plus tôt). */
   function move(itemId: string, delta: -1 | 1) {
     const list = [...queue.value];
@@ -357,6 +377,7 @@ export const useDownloadsStore = defineStore("downloads", () => {
     dialog,
     quality,
     preferredAudio,
+    autoDelete,
     usage,
     init,
     refresh,
@@ -372,6 +393,8 @@ export const useDownloadsStore = defineStore("downloads", () => {
     dequeue,
     move,
     remove,
+    retryFailed,
+    cleanupWatched,
   };
 });
 
