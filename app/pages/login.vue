@@ -14,10 +14,59 @@ const password = ref("");
 const error = ref("");
 const pending = ref(false);
 
+// Quick Connect : code à valider depuis un appareil déjà connecté (aucun mot de passe saisi ici).
+const quickAvailable = ref(false);
+const quickCode = ref<string | null>(null);
+const quickError = ref("");
+let quickTimer: ReturnType<typeof setTimeout> | null = null;
+
 onMounted(async () => {
-  profiles.value = await session.publicUsers();
+  const [users, quick] = await Promise.all([session.publicUsers(), session.quickConnectEnabled()]);
+  profiles.value = users;
+  quickAvailable.value = quick;
   manual.value = profiles.value.length === 0;
 });
+onBeforeUnmount(stopQuickConnect);
+
+async function startQuickConnect() {
+  stopQuickConnect();
+  quickError.value = "";
+  try {
+    const { code, secret } = await session.quickConnectStart();
+    quickCode.value = code;
+    pollQuickConnect(secret);
+  } catch {
+    quickError.value = "Quick Connect est indisponible sur ce serveur.";
+    quickCode.value = "";
+  }
+}
+
+function pollQuickConnect(secret: string) {
+  quickTimer = setTimeout(async () => {
+    try {
+      if (await session.quickConnectPoll(secret)) {
+        stopQuickConnect();
+        await navigateTo("/", { replace: true });
+        return;
+      }
+      pollQuickConnect(secret);
+    } catch {
+      // Code expiré (quelques minutes) ou serveur injoignable.
+      quickError.value = "Le code a expiré.";
+    }
+  }, 3000);
+}
+
+function stopQuickConnect() {
+  if (quickTimer) clearTimeout(quickTimer);
+  quickTimer = null;
+}
+
+function cancelQuickConnect() {
+  stopQuickConnect();
+  quickCode.value = null;
+  quickError.value = "";
+}
 
 function avatar(user: UserDto) {
   if (!server.value || !user.PrimaryImageTag) return undefined;
@@ -66,8 +115,24 @@ async function changeServer() {
 
 <template>
   <AuthBackdrop :server-url="server?.url">
+    <!-- Quick Connect -->
+    <section v-if="quickCode !== null" class="auth-card items-center text-center">
+      <h1 class="text-3xl font-bold">Quick Connect</h1>
+      <template v-if="quickCode">
+        <p class="text-sm text-zinc-400">
+          Sur un appareil déjà connecté à <span class="text-zinc-200">{{ server?.name }}</span>, ouvre
+          <span class="text-zinc-200">Profil → Quick Connect</span> et saisis ce code :
+        </p>
+        <p class="font-mono text-5xl font-bold tracking-[0.3em]" aria-live="polite">{{ quickCode }}</p>
+        <p v-if="!quickError" class="text-sm text-zinc-500">En attente de validation…</p>
+      </template>
+      <p v-if="quickError" role="alert" class="text-sm text-amber-400">{{ quickError }}</p>
+      <button v-if="quickError && quickAvailable" class="auth-button" @click="startQuickConnect">Nouveau code</button>
+      <button class="text-sm text-zinc-400 hover:text-white" @click="cancelQuickConnect">← Retour</button>
+    </section>
+
     <!-- Choix du profil -->
-    <section v-if="!manual && !selected" class="flex flex-col items-center gap-10">
+    <section v-else-if="!manual && !selected" class="flex flex-col items-center gap-10">
       <h1 class="text-4xl font-medium">Qui regarde ?</h1>
       <ul class="flex flex-wrap justify-center gap-8">
         <li v-for="user in profiles" :key="user.Id">
@@ -80,7 +145,10 @@ async function changeServer() {
           </button>
         </li>
       </ul>
-      <button class="text-sm text-zinc-400 hover:text-white" @click="manual = true">Autre utilisateur</button>
+      <div class="flex gap-8 text-sm text-zinc-400">
+        <button class="hover:text-white" @click="manual = true">Autre utilisateur</button>
+        <button v-if="quickAvailable" class="hover:text-white" @click="startQuickConnect">Utiliser Quick Connect</button>
+      </div>
     </section>
 
     <!-- Identifiants -->
@@ -115,6 +183,9 @@ async function changeServer() {
       <p v-if="error" role="alert" class="text-sm text-amber-400">{{ error }}</p>
       <button type="submit" :disabled="pending" class="auth-button">
         {{ pending ? "Connexion…" : "S'identifier" }}
+      </button>
+      <button v-if="quickAvailable" type="button" class="btn-secondary justify-center" @click="startQuickConnect">
+        Utiliser Quick Connect
       </button>
 
       <div class="flex justify-between text-sm text-zinc-400">

@@ -27,3 +27,10 @@ export function thumbUrl(base: string, item: BaseItemDto, width = 480): string |
   if (item.Type === "Episode") return posterUrl(base, item, width);
   return backdropUrl(base, item, width) ?? posterUrl(base, item, width);
 }
+
+/** Photo d'une personne (distribution, réalisation). */
+export function personImageUrl(base: string, person: { Id?: string | null; PrimaryImageTag?: string | null }, width = 200) {
+  return person.Id && person.PrimaryImageTag
+    ? `${base}/Items/${person.Id}/Images/Primary?maxWidth=${width}&tag=${person.PrimaryImageTag}`
+    : undefined;
+}

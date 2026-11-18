@@ -4,6 +4,7 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api/library-api";
 import { getShowApi } from "@jellyfin/sdk/lib/utils/api/show-api";
 import { backdropUrl, posterUrl } from "~/utils/images";
+import { formatClock, resumeSeconds } from "~/utils/progress";
 
 const route = useRoute();
 const session = useSessionStore();
@@ -14,6 +15,8 @@ const series = ref<BaseItemDto | null>(null);
 const seasons = ref<BaseItemDto[]>([]);
 const seasonId = ref<string | null>(null);
 const episodes = ref<BaseItemDto[]>([]);
+/** Épisode à lancer : en cours, sinon le suivant non vu (« À suivre »), sinon le premier. */
+const next = ref<BaseItemDto | null>(null);
 const loadingEpisodes = ref(false);
 const error = ref("");
 
@@ -33,15 +36,23 @@ onMounted(async () => {
   const userId = session.session?.userId;
   if (!api || !userId) return;
   try {
-    const [item, seasonList] = await Promise.all([
+    const [item, seasonList, upNext] = await Promise.all([
       getLibraryApi(api).getItem({ itemId: seriesId, userId }),
       getShowApi(api).getSeasons({ seriesId, userId }),
+      getShowApi(api)
+        .getNextUp({ userId, seriesId, limit: 1, enableResumable: true, enableTotalRecordCount: false })
+        .then((r) => r.data.Items?.[0] ?? null)
+        .catch(() => null),
     ]);
     series.value = item.data;
     seasons.value = seasonList.data.Items ?? [];
-    // Première saison avec des épisodes non vus, sinon la première.
-    const next = seasons.value.find((s) => (s.UserData?.UnplayedItemCount ?? 0) > 0) ?? seasons.value[0];
-    seasonId.value = next?.Id ?? null;
+    next.value = upNext;
+    // Saison de l'épisode à suivre, sinon la première avec des épisodes non vus, sinon la première.
+    const season =
+      seasons.value.find((s) => upNext && s.Id === upNext.SeasonId) ??
+      seasons.value.find((s) => (s.UserData?.UnplayedItemCount ?? 0) > 0) ??
+      seasons.value[0];
+    seasonId.value = season?.Id ?? null;
   } catch {
     error.value = "Impossible de charger la série.";
   }
@@ -55,11 +66,21 @@ watch(seasonId, async (id) => {
   try {
     const { data } = await getShowApi(api).getEpisodes({ seriesId, userId, seasonId: id, fields: ["Overview"] });
     episodes.value = data.Items ?? [];
+    // Série jamais commencée : premier épisode de la première saison.
+    if (!next.value && id === seasons.value[0]?.Id) next.value = episodes.value[0] ?? null;
   } catch {
     error.value = "Impossible de charger les épisodes.";
   } finally {
     loadingEpisodes.value = false;
   }
+});
+
+const nextLabel = computed(() => {
+  const ep = next.value;
+  if (!ep) return "";
+  const at = resumeSeconds(ep.UserData?.PlaybackPositionTicks, ep.UserData?.Played);
+  const code = `S${ep.ParentIndexNumber ?? "?"}É${ep.IndexNumber ?? "?"}`;
+  return at > 0 ? `Reprendre ${code} · ${formatClock(at)}` : `Lecture ${code}`;
 });
 
 function runtime(ticks?: number | null) {
@@ -83,6 +104,13 @@ function episodeName(ep: BaseItemDto) {
         <h1 class="text-5xl font-black leading-none drop-shadow-lg">{{ series.Name }}</h1>
         <p v-if="meta" class="text-sm font-medium text-zinc-300">{{ meta }}</p>
         <p v-if="series.Overview" class="line-clamp-3 text-zinc-100 drop-shadow">{{ series.Overview }}</p>
+        <div v-if="next" class="mt-2 flex flex-wrap gap-3">
+          <NuxtLink :to="`/play/${next.Id}`" class="btn-play">
+            <svg viewBox="0 0 24 24" class="size-6 fill-current" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
+            {{ nextLabel }}
+          </NuxtLink>
+          <NuxtLink :to="`/item/${next.Id}`" class="btn-secondary">{{ next.Name }}</NuxtLink>
+        </div>
       </div>
     </section>
 
@@ -115,7 +143,7 @@ function episodeName(ep: BaseItemDto) {
 
           <div class="min-w-0 flex-1">
             <div class="mb-1 flex items-baseline justify-between gap-4">
-              <h3 class="truncate font-semibold">{{ ep.Name }}</h3>
+              <NuxtLink :to="`/item/${ep.Id}`" class="truncate font-semibold hover:underline">{{ ep.Name }}</NuxtLink>
               <span class="shrink-0 text-sm text-zinc-400">{{ runtime(ep.RunTimeTicks) }}</span>
             </div>
             <p v-if="ep.Overview" class="line-clamp-2 text-sm text-zinc-400">{{ ep.Overview }}</p>

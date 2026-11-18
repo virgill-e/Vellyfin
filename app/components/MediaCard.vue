@@ -12,7 +12,8 @@ const session = useSessionStore();
 const downloads = useDownloadsStore();
 
 const isSeries = computed(() => props.item.Type === "Series");
-const target = computed(() => (isSeries.value ? `/series/${props.item.Id}` : `/play/${props.item.Id}`));
+/** Fiche de l'élément (série ou film/épisode) ; la lecture directe passe par le bouton ▶. */
+const target = computed(() => (isSeries.value ? `/series/${props.item.Id}` : `/item/${props.item.Id}`));
 const image = computed(() => {
   const base = session.api?.basePath;
   if (!base) return undefined;
@@ -90,14 +91,16 @@ const width = computed(() => {
         v-else
         class="absolute inset-0 flex items-center justify-center gap-3 bg-black/55 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"
       >
+        <NuxtLink :to="target" class="absolute inset-0" :aria-label="`Voir la fiche de ${item.Name}`" />
         <NuxtLink
-          :to="target"
-          class="grid size-11 place-items-center rounded-full bg-white text-black transition hover:scale-110"
+          :to="`/play/${item.Id}`"
+          class="relative grid size-11 place-items-center rounded-full bg-white text-black transition hover:scale-110"
           aria-label="Lecture"
         >
           <svg viewBox="0 0 24 24" class="size-5 fill-current" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
         </NuxtLink>
         <DownloadButton
+          class="relative"
           :item-id="item.Id!"
           :name="item.Name ?? item.Id!"
           :image-url="downloadImage"
@@ -110,7 +113,9 @@ const width = computed(() => {
       </div>
     </div>
 
-    <p class="mt-2 truncate text-sm text-zinc-200" :title="item.Name ?? ''">{{ item.Name }}</p>
+    <NuxtLink :to="target" class="mt-2 block truncate text-sm text-zinc-200 hover:text-white" :title="item.Name ?? ''">
+      {{ item.Name }}
+    </NuxtLink>
     <p v-if="subtitle" class="truncate text-xs text-zinc-500">{{ subtitle }}</p>
   </article>
 </template>

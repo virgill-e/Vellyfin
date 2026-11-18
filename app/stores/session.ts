@@ -1,7 +1,9 @@
 import { acceptHMRUpdate, defineStore } from "pinia";
 import { computed, shallowRef, ref } from "vue";
 import { Jellyfin, type Api } from "@jellyfin/sdk";
-import type { UserDto } from "@jellyfin/sdk/lib/generated-client/models";
+import type { AuthenticationResult, UserDto } from "@jellyfin/sdk/lib/generated-client/models";
+import { getAuthenticationApi } from "@jellyfin/sdk/lib/utils/api/authentication-api";
+import { getVersion } from "@tauri-apps/api/app";
 import { getSystemApi } from "@jellyfin/sdk/lib/utils/api/system-api";
 import { getUserApi } from "@jellyfin/sdk/lib/utils/api/user-api";
 import { native } from "~/utils/native";
@@ -29,7 +31,6 @@ interface StoredSession {
 
 const SESSION_KEY = "vellyfin.session";
 const SERVER_KEY = "vellyfin.server";
-const APP_VERSION = "0.1.0";
 
 function deviceName(): string {
   const ua = navigator.userAgent;
@@ -64,7 +65,7 @@ export const useSessionStore = defineStore("session", () => {
   async function client(): Promise<Jellyfin> {
     if (!jellyfin) {
       jellyfin = new Jellyfin({
-        clientInfo: { name: "Vellyfin", version: APP_VERSION },
+        clientInfo: { name: "Vellyfin", version: await getVersion().catch(() => "0.0.0") },
         deviceInfo: { name: deviceName(), id: await native.deviceId() },
       });
     }
@@ -116,13 +117,50 @@ export const useSessionStore = defineStore("session", () => {
     }
   }
 
-  /** Étape 2 : authentification sur le serveur choisi. */
-  async function login(username: string, password: string) {
+  async function serverApi(): Promise<{ target: ServerInfo; candidate: Api }> {
     const target = server.value;
     if (!target) throw new Error("Choisis d'abord un serveur.");
-    const candidate = (await client()).createApi(target.url);
+    return { target, candidate: (await client()).createApi(target.url) };
+  }
 
+  /** Étape 2 : authentification sur le serveur choisi. */
+  async function login(username: string, password: string) {
+    const { target, candidate } = await serverApi();
     const { data: auth } = await candidate.authenticateUserByName(username, password);
+    await completeLogin(target, candidate, auth, username);
+  }
+
+  /** Quick Connect activé sur le serveur ? */
+  async function quickConnectEnabled(): Promise<boolean> {
+    const { candidate } = await serverApi();
+    try {
+      const { data } = await getAuthenticationApi(candidate).getQuickConnectEnabled();
+      return data === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Demande un code Quick Connect à valider depuis un appareil déjà connecté. */
+  async function quickConnectStart(): Promise<{ code: string; secret: string }> {
+    const { candidate } = await serverApi();
+    const { data } = await getAuthenticationApi(candidate).initiateQuickConnect();
+    if (!data.Code || !data.Secret) throw new Error("Quick Connect indisponible.");
+    return { code: data.Code, secret: data.Secret };
+  }
+
+  /** Vrai une fois le code validé ; termine alors la connexion. */
+  async function quickConnectPoll(secret: string): Promise<boolean> {
+    const { target, candidate } = await serverApi();
+    const auth = getAuthenticationApi(candidate);
+    const { data: state } = await auth.getQuickConnectState({ secret });
+    if (!state.Authenticated) return false;
+    const { data } = await auth.authenticateWithQuickConnect({ quickConnectDto: { Secret: secret } });
+    await completeLogin(target, candidate, data, "");
+    return true;
+  }
+
+  async function completeLogin(target: ServerInfo, candidate: Api, auth: AuthenticationResult, username: string) {
     const token = auth.AccessToken;
     const user = auth.User;
     if (!token || !user?.Id) throw new Error("Authentification refusée.");
@@ -190,6 +228,9 @@ export const useSessionStore = defineStore("session", () => {
     forgetServer,
     publicUsers,
     login,
+    quickConnectEnabled,
+    quickConnectStart,
+    quickConnectPoll,
     restore,
     logout,
   };

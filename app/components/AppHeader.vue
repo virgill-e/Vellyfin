@@ -44,6 +44,7 @@ async function logout() {
       </NuxtLink>
     </nav>
     <div v-if="session.session" class="ml-auto flex items-center gap-4 text-sm">
+      <SearchBox />
       <span class="grid size-8 place-items-center rounded bg-accent font-semibold" :title="session.session.userName">
         {{ session.session.userName[0]?.toUpperCase() }}
       </span>

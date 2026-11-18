@@ -2,6 +2,7 @@
 // Accueil façon Netflix : bannière + rangées horizontales.
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api/library-api";
+import { getShowApi } from "@jellyfin/sdk/lib/utils/api/show-api";
 
 const session = useSessionStore();
 const downloads = useDownloadsStore();
@@ -9,6 +10,7 @@ const progress = useProgressStore();
 
 const libraries = useLibrariesStore();
 const resume = ref<BaseItemDto[]>([]);
+const nextUp = ref<BaseItemDto[]>([]);
 const movies = ref<BaseItemDto[]>([]);
 const shows = ref<BaseItemDto[]>([]);
 const error = ref("");
@@ -26,7 +28,7 @@ onMounted(async () => {
 
   const library = getLibraryApi(api);
   try {
-    const [resumeRes, moviesRes, showsRes] = await Promise.all([
+    const [resumeRes, nextUpRes, moviesRes, showsRes] = await Promise.all([
       library.getItems({
         userId,
         includeItemTypes: ["Movie", "Episode"],
@@ -36,6 +38,8 @@ onMounted(async () => {
         sortOrder: ["Descending"],
         limit: 20,
       }),
+      // Épisode suivant des séries commencées (les épisodes entamés sont déjà dans « Reprendre »).
+      getShowApi(api).getNextUp({ userId, limit: 20, enableResumable: false, enableTotalRecordCount: false }),
       library.getItems({
         userId,
         includeItemTypes: ["Movie"],
@@ -55,6 +59,7 @@ onMounted(async () => {
       }),
     ]);
     resume.value = resumeRes.data.Items ?? [];
+    nextUp.value = nextUpRes.data.Items ?? [];
     movies.value = moviesRes.data.Items ?? [];
     shows.value = showsRes.data.Items ?? [];
   } catch {
@@ -83,6 +88,7 @@ function showError(message: string) {
 
     <div class="relative z-10 flex flex-col gap-6" :class="heroes.length ? '-mt-32' : ''">
       <MediaRow title="Reprendre la lecture" :items="resume" landscape @error="showError" />
+      <MediaRow title="À suivre" :items="nextUp" landscape @error="showError" />
       <LibraryRow />
       <MediaRow title="Films ajoutés récemment" :items="movies" @error="showError" />
       <MediaRow title="Séries mises à jour" :items="shows" @error="showError" />

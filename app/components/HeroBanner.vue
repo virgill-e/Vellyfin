@@ -81,6 +81,12 @@ function runtime(ticks?: number | null) {
             <svg viewBox="0 0 24 24" class="size-6 fill-current" aria-hidden="true"><path d="M7 4v16l13-8z" /></svg>
             Lecture
           </NuxtLink>
+          <NuxtLink :to="`/item/${current.Id}`" class="btn-secondary">
+            <svg viewBox="0 0 24 24" class="size-5 fill-none stroke-current stroke-2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" stroke-linecap="round" />
+            </svg>
+            Plus d'infos
+          </NuxtLink>
           <DownloadButton
             variant="wide"
             :item-id="current.Id!"

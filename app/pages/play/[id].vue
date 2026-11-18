@@ -26,6 +26,8 @@ const router = useRouter();
 
 const itemId = String(route.params.id);
 const offline = route.query.offline === "1";
+/** « Depuis le début » (?start=0) : ignore la position de reprise. */
+const fromStart = route.query.start === "0";
 const video = ref<HTMLVideoElement | null>(null);
 const source = ref<PlaybackSource | null>(null);
 const title = ref("");
@@ -88,14 +90,16 @@ async function onlineStart(): Promise<number> {
   try {
     const { data } = await getLibraryApi(api).getItem({ itemId, userId: current.userId });
     title.value = data.Name ?? "";
+    if (fromStart) return 0;
     return pickResume(progress.local(itemId), data.UserData ?? null);
   } catch {
-    return pickResume(progress.local(itemId), null);
+    return fromStart ? 0 : pickResume(progress.local(itemId), null);
   }
 }
 
 /** Hors ligne : position locale, ou celle du serveur si elle est plus récente et joignable. */
 async function offlineStart(): Promise<number> {
+  if (fromStart) return 0;
   const api = session.api;
   const current = session.session;
   let server: ServerPosition | null = null;
