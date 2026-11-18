@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Vellyfin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.vellyfin.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -36,20 +36,38 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$APPDATA/downloads/**"]
+          "allow": [
+            "$APPDATA/downloads/**"
+          ]
         }
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUwMDU3REE0NTVDNkQzMUUKUldRZTA4WlZwSDBGNE1yaCtzV1JiSWhVTVFVWVRJWHM0YXVFTnZUSTNseDMvTU1FeVVsLzV6TG4K",
+      "endpoints": [
+        "https://github.com/virgill-e/Vellyfin/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

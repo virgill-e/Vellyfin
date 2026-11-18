@@ -10,6 +10,8 @@ export interface PlaybackOptions {
   userId: string;
   /** Débit plafonné (bit/s) ; absent = qualité d'origine (remux si possible). */
   maxBitrate?: number;
+  /** Obligatoire avec `audioStreamIndex` : Jellyfin ignore l'index sans la source visée. */
+  mediaSourceId?: string;
   audioStreamIndex?: number;
   subtitleStreamIndex?: number;
   startTimeTicks?: number;
@@ -27,7 +29,25 @@ export interface PlaybackSource {
    */
   transcodeReasons: string[];
   textSubtitles: { index: number; label: string; language?: string; url: string }[];
-  audioStreams: MediaStream[];
+  /** Pistes audio de la source ; le flux HLS n'en contient qu'une, choisie à la négociation. */
+  audioTracks: AudioTrack[];
+  /** Index de la piste audio présente dans le flux, ou null si inconnue. */
+  audioIndex: number | null;
+}
+
+export interface AudioTrack {
+  index: number;
+  label: string;
+}
+
+/** Pistes audio sélectionnables, dans l'ordre du fichier. */
+export function audioTracks(streams: MediaStream[]): AudioTrack[] {
+  return streams
+    .filter((s) => s.Type === "Audio" && s.Index != null)
+    .map((s) => ({
+      index: s.Index!,
+      label: s.DisplayTitle ?? s.Language ?? `Piste ${s.Index}`,
+    }));
 }
 
 export async function negotiatePlayback(
@@ -41,6 +61,7 @@ export async function negotiatePlayback(
       UserId: options.userId,
       DeviceProfile: buildDeviceProfile(detectCodecs()),
       MaxStreamingBitrate: options.maxBitrate ?? 120_000_000,
+      MediaSourceId: options.mediaSourceId,
       AudioStreamIndex: options.audioStreamIndex,
       SubtitleStreamIndex: options.subtitleStreamIndex,
       StartTimeTicks: options.startTimeTicks,
@@ -56,6 +77,12 @@ export async function negotiatePlayback(
   const source = data.MediaSources?.[0];
   if (!data.PlaySessionId || !source?.Id || !source.TranscodingUrl) {
     throw new Error(data.ErrorCode ? `Lecture refusée : ${data.ErrorCode}` : "Aucun flux lisible.");
+  }
+
+  // Piste réellement présente dans le flux : celle inscrite dans l'URL de transcodage.
+  const audioIndex = streamAudioIndex(source.TranscodingUrl) ?? source.DefaultAudioStreamIndex ?? null;
+  if (options.audioStreamIndex !== undefined && audioIndex !== options.audioStreamIndex) {
+    throw new Error("Le serveur n'a pas appliqué la piste audio demandée.");
   }
 
   const streams = source.MediaStreams ?? [];
@@ -74,7 +101,8 @@ export async function negotiatePlayback(
     playlistUrl: absolute(api, source.TranscodingUrl),
     transcodeReasons: transcodeReasons(source.TranscodingUrl),
     textSubtitles,
-    audioStreams: streams.filter((s) => s.Type === "Audio"),
+    audioTracks: audioTracks(streams),
+    audioIndex,
   };
 }
 
@@ -90,10 +118,20 @@ function absolute(api: Api, path: string): string {
   return /^https?:\/\//i.test(path) ? path : `${api.basePath}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-export function transcodeReasons(url: string): string[] {
+function queryParam(url: string, name: string): string | null {
   const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
-  const value = new URLSearchParams(query).get("TranscodeReasons");
+  return new URLSearchParams(query).get(name);
+}
+
+export function transcodeReasons(url: string): string[] {
+  const value = queryParam(url, "TranscodeReasons");
   return value ? value.split(",").filter(Boolean) : [];
+}
+
+/** Index de la piste audio inscrite dans l'URL de transcodage, ou null. */
+export function streamAudioIndex(url: string): number | null {
+  const value = queryParam(url, "AudioStreamIndex");
+  return value !== null && /^\d+$/.test(value) ? Number(value) : null;
 }
 
 /**

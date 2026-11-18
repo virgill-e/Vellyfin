@@ -16,6 +16,8 @@
     "@jellyfin/sdk": "^1.0.2",
     "@pinia/nuxt": "^1.0.3",
     "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "axios": "^1.21.1",
     "hls.js": "^1.7.4",
     "nuxt": "^4.6.4",

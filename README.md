@@ -28,7 +28,9 @@ pnpm test && pnpm typecheck && (cd src-tauri && cargo test && cargo clippy)
 
 ## Installeurs
 
-Les builds macOS (`.dmg`) et Windows (`.exe`) sont produits par le workflow **Build**, sur tag `v*` ou à la demande (onglet Actions → Build → Run workflow). Ils ne sont pas signés.
+Les installeurs macOS (`.dmg`) et Windows (`.exe`) sont sur la page [Releases](https://github.com/virgill-e/Vellyfin/releases). Ils ne sont pas signés par Apple ni Microsoft ; les instructions d'installation figurent dans chaque Release. Une fois installée, l'app se met à jour automatiquement ([ADR-003](docs/adr/003-mise-a-jour.md)).
+
+Publier une version : mettre à jour `version` dans `src-tauri/tauri.conf.json` et `src-tauri/Cargo.toml`, pousser le tag `vX.Y.Z` correspondant, puis publier le brouillon de Release créé par le workflow **Build**.
 
 ## Licence
 

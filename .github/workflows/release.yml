@@ -1,14 +1,18 @@
 name: Build
 
-# Installeurs macOS et Windows : uniquement sur tag de version (v*) ou à la demande
-# (onglet Actions → Build → Run workflow). Builds non signés.
+# Installeurs macOS et Windows, non signés par Apple/Microsoft mais signés pour la mise à jour
+# automatique (clé TAURI_SIGNING_PRIVATE_KEY, voir docs/adr/003-mise-a-jour.md).
+# - Tag v* (doit correspondre à la version de tauri.conf.json) : brouillon de Release GitHub
+#   avec installeurs et latest.json ; la mise à jour est proposée aux utilisateurs une fois
+#   le brouillon publié.
+# - À la demande (Actions → Build → Run workflow) : artifacts de test, conservés 7 jours.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -20,14 +24,23 @@ jobs:
           - name: macOS Apple Silicon
             os: macos-latest
             bundles: app,dmg
-            artifact: vellyfin-macos-arm64
           - name: Windows x64
             os: windows-latest
             bundles: nsis
-            artifact: vellyfin-windows-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Vérifier que le tag correspond à la version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME ≠ version v$version de tauri.conf.json"
+            exit 1
+          fi
+
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -38,12 +51,26 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - run: pnpm tauri build --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v7
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          name: ${{ matrix.artifact }}
-          retention-days: 7
-          if-no-files-found: error
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/nsis/*.exe
+          args: --bundles ${{ matrix.bundles }}
+          # Sans tag : aucune Release, seulement des artifacts.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: Vellyfin ${{ github.ref_name }}
+          releaseDraft: true
+          updaterJsonPreferNsis: true
+          uploadWorkflowArtifacts: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          releaseBody: |
+            Installeurs non signés par Apple et Microsoft.
+
+            **Windows (x64)** : lancer le `-setup.exe`. SmartScreen : *Informations complémentaires* → *Exécuter quand même*.
+
+            **macOS (Apple Silicon)** : ouvrir le `.dmg` et glisser Vellyfin dans Applications. Si macOS indique que l'app est endommagée :
+            `xattr -dr com.apple.quarantine /Applications/Vellyfin.app`
+
+            Les versions déjà installées se mettent à jour automatiquement.

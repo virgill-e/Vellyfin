@@ -1,6 +1,6 @@
 # ADR-002 — Stratégie de téléchargement
 
-- Statut : **proposé** — à valider par le prototype de phase 0
+- Statut : **accepté** — validé sur macOS et Windows en phase 0
 - Date : 2026-11-17
 
 ## Contexte
@@ -15,7 +15,7 @@ Le fichier original (MKV, HEVC, ASS, DTS…) n'est pas toujours lisible par le W
 | B. MP4 progressif transcodé (`Videos/{id}/stream.mp4`) | **Non** (taille inconnue, pas de Range pendant le transcodage) | Oui | Écarté |
 | **C. HLS fMP4 segment par segment, puis concaténation** | Oui, au segment près | Oui | Retenu |
 
-## Décision proposée : C
+## Décision : C
 
 1. `PlaybackInfo` avec le profil d'appareil (ADR-001) → URL HLS (`master.m3u8`) avec conteneur de segments **fMP4**.
 2. Rust télécharge la playlist, le segment d'initialisation (`#EXT-X-MAP`) puis chaque segment, dans l'ordre ; chaque segment terminé est enregistré, ce qui permet la reprise.
@@ -30,12 +30,12 @@ Les routes HLS dynamiques (`/Videos/{id}/master.m3u8`, `main.m3u8`, segments) et
 
 | Point | macOS | Windows |
 |---|---|---|
-| Remux sans transcodage vidéo (source HEVC/MKV) | ✅ Session Jellyfin : « Vidéo copiée (hevc) · Audio copié (eac3) » | — |
-| Segments demandés plus vite que la lecture (pas de blocage par la limitation des transcodages) | ✅ Téléchargements menés à terme | — |
-| Reprise après interruption (annulation, coupure réseau courte, redémarrage de l'app) | ✅ Reprend aux segments déjà reçus | — |
-| Continuité des timestamps au point de reprise dans le fichier concaténé | ✅ Lecture hors ligne sans défaut signalé | — |
-| `.mp4` concaténé lisible et navigable (déplacement dans la vidéo) | ✅ | — |
-| Sous-titres texte en streaming (WebVTT externe) | ✅ | — |
-| Estimation de la taille et du temps restant | ✅ Extrapolée depuis les segments reçus (taille exacte inconnue avant la fin) | — |
+| Remux sans transcodage vidéo (source HEVC/MKV) | ✅ Session Jellyfin : « Vidéo copiée (hevc) · Audio copié (eac3) » | ✅ |
+| Segments demandés plus vite que la lecture (pas de blocage par la limitation des transcodages) | ✅ Téléchargements menés à terme | ✅ |
+| Reprise après interruption (annulation, coupure réseau courte, redémarrage de l'app) | ✅ Reprend aux segments déjà reçus | ✅ |
+| Continuité des timestamps au point de reprise dans le fichier concaténé | ✅ Lecture hors ligne sans défaut signalé | ✅ |
+| `.mp4` concaténé lisible et navigable (déplacement dans la vidéo) | ✅ | ✅ |
+| Sous-titres texte en streaming (WebVTT externe) | ✅ | ✅ |
+| Estimation de la taille et du temps restant | ✅ Extrapolée depuis les segments reçus (taille exacte inconnue avant la fin) | ✅ |
 
-**macOS : phase 0 validée (2026-11-17).** Le statut passera à « accepté » après validation sur Windows.
+**Phase 0 validée sur macOS et Windows (2026-11-17).**
