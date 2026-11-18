@@ -5,8 +5,13 @@
 //!   - `parts/init.mp4`, `parts/00000.m4s`… pendant le téléchargement
 //!   - `media.mp4` + `meta.json` une fois terminé
 //!
+//!   - `subs/<index>.vtt` : sous-titres texte (WebVTT), `image.jpg` : vignette
+//!
 //! Reprise : un segment n'est écrit sous son nom définitif qu'une fois complet ;
 //! relancer un téléchargement saute les segments déjà présents.
+//!
+//! L'ordre, la pause et la file d'attente sont gérés par l'interface, qui ne lance
+//! qu'un téléchargement à la fois ; le sémaphore ci-dessous reste une sécurité.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -65,6 +70,47 @@ pub struct DownloadRequest {
     /// Vignette à conserver avec le téléchargement (affichage hors ligne).
     #[serde(default)]
     pub image_url: Option<String>,
+    /// Sous-titres texte à enregistrer (WebVTT), lisibles hors ligne.
+    #[serde(default)]
+    pub subtitles: Vec<SubtitleRequest>,
+    /// Informations d'affichage hors ligne (série, saison, épisode…).
+    #[serde(default)]
+    pub info: MediaInfo,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleRequest {
+    pub index: u32,
+    pub label: String,
+    #[serde(default)]
+    pub language: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleFile {
+    pub index: u32,
+    pub label: String,
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Chemin absolu du fichier .vtt.
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MediaInfo {
+    /// « Movie » ou « Episode ».
+    pub kind: Option<String>,
+    pub series_id: Option<String>,
+    pub series_name: Option<String>,
+    pub season: Option<u32>,
+    pub episode: Option<u32>,
+    pub runtime_ticks: Option<u64>,
+    /// Libellé de la piste audio téléchargée.
+    pub audio: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -108,6 +154,13 @@ pub struct DownloadMeta {
     /// Chemin absolu de la vignette locale, si elle a pu être récupérée.
     #[serde(default)]
     pub image: Option<String>,
+    #[serde(default)]
+    pub subtitles: Vec<SubtitleFile>,
+    #[serde(default)]
+    pub info: MediaInfo,
+    /// Taille du fichier final en octets (0 tant qu'il n'est pas terminé).
+    #[serde(default)]
+    pub size: u64,
 }
 
 fn is_safe_id(id: &str) -> bool {
@@ -230,6 +283,48 @@ pub async fn downloads_list(app: AppHandle) -> Result<Vec<DownloadMeta>, String>
     Ok(found)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Usage {
+    /// Octets occupés par les téléchargements (terminés et partiels).
+    used: u64,
+    /// Octets disponibles sur le disque des téléchargements.
+    free: u64,
+}
+
+#[tauri::command]
+pub async fn downloads_usage(app: AppHandle) -> Result<Usage, String> {
+    let root = downloads_root(&app)?;
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|e| e.to_string())?;
+    let used = dir_size(&root).await;
+    let free = fs4::available_space(&root).map_err(|e| e.to_string())?;
+    Ok(Usage { used, free })
+}
+
+/// Taille totale d'un dossier (récursif, sans suivre les liens).
+async fn dir_size(root: &Path) -> u64 {
+    let mut total = 0;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(mut entries) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let Ok(meta) = entry.metadata().await else {
+                continue;
+            };
+            if meta.is_dir() {
+                pending.push(entry.path());
+            } else {
+                total += meta.len();
+            }
+        }
+    }
+    total
+}
+
 #[tauri::command]
 pub async fn download_delete(
     app: AppHandle,
@@ -296,7 +391,14 @@ impl Job {
         let _ = self.app.emit(EVENT, progress);
     }
 
-    fn meta(&self, state: DownloadState, segments: usize, file: Option<String>) -> DownloadMeta {
+    fn meta(
+        &self,
+        state: DownloadState,
+        segments: usize,
+        file: Option<String>,
+        subtitles: Vec<SubtitleFile>,
+        size: u64,
+    ) -> DownloadMeta {
         DownloadMeta {
             server_id: self.request.server_id.clone(),
             user_id: self.request.user_id.clone(),
@@ -310,6 +412,9 @@ impl Job {
                 .image_path()
                 .exists()
                 .then(|| self.image_path().to_string_lossy().into_owned()),
+            subtitles,
+            info: self.request.info.clone(),
+            size,
         }
     }
 
@@ -330,6 +435,35 @@ impl Job {
         if let Err(e) = self.fetch_to(&url, &self.image_path()).await {
             log::warn!("vignette de {} : {e}", self.request.item_id);
         }
+    }
+
+    /// Récupère les sous-titres texte (meilleur effort, chacun indépendamment).
+    async fn fetch_subtitles(&self) -> Vec<SubtitleFile> {
+        let dir = self.dir.join("subs");
+        if self.request.subtitles.is_empty() || tokio::fs::create_dir_all(&dir).await.is_err() {
+            return Vec::new();
+        }
+        let mut saved = Vec::new();
+        for sub in &self.request.subtitles {
+            let Ok(url) = Url::parse(&sub.url) else {
+                continue;
+            };
+            let path = dir.join(format!("{}.vtt", sub.index));
+            match self.fetch_to(&url, &path).await {
+                Ok(_) => saved.push(SubtitleFile {
+                    index: sub.index,
+                    label: sub.label.clone(),
+                    language: sub.language.clone(),
+                    path: path.to_string_lossy().into_owned(),
+                }),
+                Err(e) => log::warn!(
+                    "sous-titres {} de {} : {e}",
+                    sub.index,
+                    self.request.item_id
+                ),
+            }
+        }
+        saved
     }
 
     async fn get_text(&self, url: &Url) -> Result<String, String> {
@@ -369,7 +503,7 @@ impl Job {
         self.fetch_image().await;
         write_meta(
             &self.dir,
-            &self.meta(DownloadState::Downloading, total, None),
+            &self.meta(DownloadState::Downloading, total, None, Vec::new(), 0),
         )
         .await?;
 
@@ -394,11 +528,16 @@ impl Job {
         tokio::fs::remove_dir_all(&parts)
             .await
             .map_err(|e| e.to_string())?;
+        let subtitles = self.fetch_subtitles().await;
+        let size = tokio::fs::metadata(&file)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
 
         let file = file.to_string_lossy().into_owned();
         write_meta(
             &self.dir,
-            &self.meta(DownloadState::Completed, total, Some(file)),
+            &self.meta(DownloadState::Completed, total, Some(file), subtitles, size),
         )
         .await?;
         self.emit(DownloadState::Completed, total, total, bytes, None);
@@ -544,6 +683,30 @@ mod tests {
             tokio::fs::read_to_string(&dest).await.unwrap(),
             "INITS0S1S2"
         );
+    }
+
+    #[test]
+    fn meta_ancienne_version_reste_lisible() {
+        let json = r#"{"serverId":"s","userId":"u","itemId":"i","name":"Film","state":"completed","segments":3,"variant":"bitrate=original","file":"/x/media.mp4"}"#;
+        let meta: DownloadMeta = serde_json::from_str(json).unwrap();
+        assert!(meta.subtitles.is_empty());
+        assert_eq!(meta.size, 0);
+        assert!(meta.info.series_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn taille_d_un_dossier_recursive() {
+        let dir = tempfile::tempdir().unwrap();
+        tokio::fs::create_dir_all(dir.path().join("a/b"))
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("a/x"), b"12345")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("a/b/y"), b"123")
+            .await
+            .unwrap();
+        assert_eq!(dir_size(dir.path()).await, 8);
     }
 
     #[tokio::test]

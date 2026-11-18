@@ -1,54 +1,54 @@
-// Mise à jour automatique : vérifie la dernière Release GitHub au démarrage puis toutes
-// les 6 h, télécharge la mise à jour en arrière-plan, et laisse l'utilisateur choisir
-// le moment du redémarrage (une lecture ou un téléchargement en cours n'est jamais coupé).
-import { check, type Update } from "@tauri-apps/plugin-updater";
+// Mise à jour obligatoire au lancement : si une version plus récente est publiée,
+// elle est téléchargée et installée avant d'afficher l'app, puis l'app redémarre.
+// Sans réseau (ou en cas d'erreur), l'app démarre normalement : les téléchargements
+// doivent rester lisibles hors ligne. Pas de vérification en cours d'utilisation :
+// une installation forcée couperait une lecture.
+import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
-const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+/** Délai maximal de la vérification : au-delà, l'app démarre sans attendre. */
+const CHECK_TIMEOUT_MS = 5000;
 
-const ready = shallowRef<Update | null>(null);
-const installing = ref(false);
-const error = ref("");
+export type UpdatePhase = "checking" | "downloading" | "installing" | "ready";
+
+// En développement, la version locale n'est pas publiée : pas de vérification.
+const phase = ref<UpdatePhase>(import.meta.dev ? "ready" : "checking");
+const version = ref("");
+const received = ref(0);
+const total = ref<number | null>(null);
 let started = false;
-let checking = false;
 
-async function checkNow() {
-  if (checking || ready.value) return;
-  checking = true;
+async function run() {
   try {
-    const update = await check();
-    if (!update) return;
-    await update.download();
-    ready.value = update;
-  } catch (e) {
-    // Hors ligne ou Release inaccessible : on réessaiera à la prochaine vérification.
-    console.warn("Mise à jour : vérification impossible", e);
-  } finally {
-    checking = false;
-  }
-}
-
-async function installAndRestart() {
-  const update = ready.value;
-  if (!update || installing.value) return;
-  installing.value = true;
-  error.value = "";
-  try {
+    const update = await Promise.race([
+      check({ timeout: CHECK_TIMEOUT_MS }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), CHECK_TIMEOUT_MS + 1000)),
+    ]);
+    if (!update) {
+      phase.value = "ready";
+      return;
+    }
+    version.value = update.version;
+    phase.value = "downloading";
+    await update.download((event) => {
+      if (event.event === "Started") total.value = event.data.contentLength ?? null;
+      if (event.event === "Progress") received.value += event.data.chunkLength;
+    });
+    phase.value = "installing";
     // Sous Windows, l'installeur ferme l'app puis la relance lui-même.
     await update.install();
     await relaunch();
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
-    installing.value = false;
+    // Hors ligne, Release inaccessible ou installation impossible : on démarre quand même.
+    console.warn("Mise à jour impossible", e);
+    phase.value = "ready";
   }
 }
 
 export function useUpdater() {
-  // Pas de vérification en développement : la version locale n'est pas publiée.
-  if (!started && !import.meta.dev) {
+  if (!started && phase.value === "checking") {
     started = true;
-    void checkNow();
-    setInterval(checkNow, CHECK_EVERY_MS);
+    void run();
   }
-  return { ready, installing, error, installAndRestart, dismiss: () => (ready.value = null) };
+  return { phase, version, received, total };
 }

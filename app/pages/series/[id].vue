@@ -83,6 +83,39 @@ const nextLabel = computed(() => {
   return at > 0 ? `Reprendre ${code} · ${formatClock(at)}` : `Lecture ${code}`;
 });
 
+const batchMessage = ref("");
+
+/** Ajoute des épisodes à la file (langue audio préférée, qualité choisie). */
+function downloadEpisodes(list: BaseItemDto[], label: string) {
+  error.value = "";
+  const todo = list.filter((ep) => ep.Id && !downloads.statusOf(ep.Id));
+  if (!todo.length) {
+    batchMessage.value = `${label} : déjà téléchargé ou en file.`;
+    return;
+  }
+  try {
+    downloads.enqueue(todo.map((ep) => ({ itemId: ep.Id!, name: episodeName(ep), imageUrl: posterUrl(base.value, ep, 480) })));
+    batchMessage.value = `${todo.length} épisode(s) ajouté(s) à la file de téléchargement.`;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function downloadNext(count = 5) {
+  const api = session.api;
+  const userId = session.session?.userId;
+  const first = next.value;
+  if (!api || !userId || !first?.Id) return;
+  try {
+    const { data } = await getShowApi(api).getEpisodes({ seriesId, userId, startItemId: first.Id, limit: count });
+    downloadEpisodes(data.Items ?? [], `Les ${count} prochains épisodes`);
+  } catch {
+    error.value = "Impossible de lister les prochains épisodes.";
+  }
+}
+
+const seasonName = computed(() => seasons.value.find((s) => s.Id === seasonId.value)?.Name ?? "Saison");
+
 function runtime(ticks?: number | null) {
   return ticks ? `${Math.round(ticks / 600_000_000)} min` : "";
 }
@@ -110,6 +143,10 @@ function episodeName(ep: BaseItemDto) {
             {{ nextLabel }}
           </NuxtLink>
           <NuxtLink :to="`/item/${next.Id}`" class="btn-secondary">{{ next.Name }}</NuxtLink>
+          <button class="btn-secondary" title="Télécharger cet épisode et les 4 suivants" @click="downloadNext()">
+            <DownloadIcon :status="null" />
+            5 prochains épisodes
+          </button>
         </div>
       </div>
     </section>
@@ -119,10 +156,24 @@ function episodeName(ep: BaseItemDto) {
     <section class="px-6 sm:px-12">
       <div class="mb-6 flex items-center justify-between gap-4">
         <h2 class="text-2xl font-bold">Épisodes</h2>
-        <select v-if="seasons.length" v-model="seasonId" class="field bg-surface-raised py-2 text-base" aria-label="Saison">
-          <option v-for="s in seasons" :key="s.Id" :value="s.Id">{{ s.Name }}</option>
-        </select>
+        <div class="flex items-center gap-3">
+          <button
+            v-if="episodes.length"
+            class="btn-ghost"
+            :title="`Télécharger tous les épisodes de ${seasonName}`"
+            @click="downloadEpisodes(episodes, seasonName)"
+          >
+            <DownloadIcon :status="null" />
+            Télécharger la saison
+          </button>
+          <select v-if="seasons.length" v-model="seasonId" class="field bg-surface-raised py-2 text-base" aria-label="Saison">
+            <option v-for="s in seasons" :key="s.Id" :value="s.Id">{{ s.Name }}</option>
+          </select>
+        </div>
       </div>
+      <p v-if="batchMessage" role="status" class="mb-4 text-sm text-zinc-400">
+        {{ batchMessage }} <NuxtLink to="/downloads" class="underline">Voir les téléchargements</NuxtLink>
+      </p>
 
       <p v-if="loadingEpisodes" class="text-zinc-500">Chargement…</p>
       <ol v-else class="flex flex-col divide-y divide-white/10 border-t border-white/10">

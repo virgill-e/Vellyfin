@@ -40,6 +40,8 @@ export interface PlaybackSource {
 export interface AudioTrack {
   index: number;
   label: string;
+  /** Code de langue (« fre », « eng »…), si connu. */
+  language?: string;
 }
 
 /** Pistes audio sélectionnables, dans l'ordre du fichier. */
@@ -49,6 +51,7 @@ export function audioTracks(streams: MediaStream[]): AudioTrack[] {
     .map((s) => ({
       index: s.Index!,
       label: s.DisplayTitle ?? s.Language ?? `Piste ${s.Index}`,
+      ...(s.Language ? { language: s.Language } : {}),
     }));
 }
 

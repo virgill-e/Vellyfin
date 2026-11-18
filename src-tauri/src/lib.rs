@@ -32,6 +32,7 @@ pub fn run() {
             downloads::download_cancel,
             downloads::downloads_list,
             downloads::download_delete,
+            downloads::downloads_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

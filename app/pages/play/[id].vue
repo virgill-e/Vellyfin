@@ -20,6 +20,8 @@ import {
   type PlaybackSource,
 } from "~/utils/playback";
 import { activeSegment, keyAction, nextEpisode, trickplayOf, type PlayerAction } from "~/utils/player";
+import { nextOfflineEpisode } from "~/utils/downloads";
+import type { DownloadMeta } from "~/utils/native";
 
 // Une page par lecture : passer à l'épisode suivant recrée le lecteur.
 definePageMeta({ public: true, key: (route) => route.fullPath });
@@ -45,7 +47,7 @@ const video = ref<HTMLVideoElement | null>(null);
 const v = useVideoState(video);
 const source = ref<PlaybackSource | null>(null);
 const item = ref<BaseItemDto | null>(null);
-const offlineName = ref("");
+const offlineMeta = ref<DownloadMeta | null>(null);
 const error = ref("");
 const loading = ref(true);
 const codecs = detectCodecs();
@@ -73,14 +75,25 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
 // ---- Affichage -------------------------------------------------------------
 
-const title = computed(() => item.value?.Name ?? offlineName.value);
+const title = computed(() => item.value?.Name ?? offlineMeta.value?.name.split(" · ").pop() ?? "");
 const subtitleLine = computed(() => {
   const i = item.value;
-  if (i?.Type !== "Episode") return "";
-  return `${i.SeriesName ?? ""} · S${i.ParentIndexNumber ?? "?"}É${i.IndexNumber ?? "?"}`;
+  if (i?.Type === "Episode") return `${i.SeriesName ?? ""} · S${i.ParentIndexNumber ?? "?"}É${i.IndexNumber ?? "?"}`;
+  const info = offlineMeta.value?.info;
+  if (info?.kind === "Episode") return `${info.seriesName ?? ""} · S${info.season ?? "?"}É${info.episode ?? "?"}`;
+  return "";
 });
 const controlsVisible = computed(() => controlsShown.value || v.paused.value || panel.value !== null || !!error.value);
-const textSubtitles = computed(() => source.value?.textSubtitles ?? []);
+const textSubtitles = computed(() =>
+  offline
+    ? (offlineMeta.value?.subtitles ?? []).map((sub) => ({
+        index: sub.index,
+        label: sub.label,
+        language: sub.language ?? undefined,
+        url: convertFileSrc(sub.path),
+      }))
+    : (source.value?.textSubtitles ?? []),
+);
 const hasTracks = computed(() => (source.value?.audioTracks.length ?? 0) > 1 || textSubtitles.value.length > 0 || offline);
 
 const trickplay = computed(() => trickplayOf(item.value, source.value?.mediaSourceId ?? null));
@@ -203,7 +216,17 @@ async function playOffline() {
   await downloads.init();
   const meta = downloads.saved.find((d) => d.itemId === itemId && d.state === "completed");
   if (!meta?.file) throw new Error("Fichier hors ligne introuvable.");
-  offlineName.value = meta.name;
+  offlineMeta.value = meta;
+  // Épisode suivant parmi les téléchargements de la même série.
+  const following = nextOfflineEpisode(downloads.saved, meta);
+  if (following) {
+    next.value = {
+      Id: following.itemId,
+      Name: following.name.split(" · ").pop(),
+      ParentIndexNumber: following.info.season,
+      IndexNumber: following.info.episode,
+    };
+  }
   const startAt = await offlineStart();
   const el = video.value!;
   if (startAt > 0) el.addEventListener("loadedmetadata", () => (el.currentTime = startAt), { once: true });
@@ -425,7 +448,7 @@ async function playNext() {
   const target = next.value;
   if (!target?.Id) return;
   await tracker.finish();
-  await navigateTo(`/play/${target.Id}`, { replace: true });
+  await navigateTo(offline ? `/play/${target.Id}?offline=1` : `/play/${target.Id}`, { replace: true });
 }
 
 // ---- Clavier ----------------------------------------------------------------------
@@ -563,6 +586,7 @@ const supported = Object.entries(codecs)
       :subtitle-index="subtitleIndex"
       :switching="switching"
       :offline="offline"
+      :offline-audio="offlineMeta?.info?.audio ?? null"
       @audio="changeAudio"
       @subtitle="subtitleIndex = $event"
       @close="panel = null"

@@ -1,9 +1,16 @@
 <script setup lang="ts">
-// Envoie au serveur les positions de lecture enregistrées hors ligne.
-onMounted(() => useProgressStore().startSync());
+// Au lancement : mise à jour obligatoire si une version plus récente est publiée,
+// puis l'app (et l'envoi des positions de lecture enregistrées hors ligne).
+const { phase } = useUpdater();
+const ready = computed(() => phase.value === "ready");
+
+watch(ready, (value) => value && useProgressStore().startSync(), { immediate: true });
 </script>
 
 <template>
-  <NuxtPage />
-  <UpdateBanner />
+  <template v-if="ready">
+    <NuxtPage />
+    <DownloadDialog />
+  </template>
+  <UpdateGate v-else />
 </template>

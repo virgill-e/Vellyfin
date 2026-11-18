@@ -20,6 +20,7 @@ const status = computed(() => downloads.statusOf(props.itemId));
 const progress = computed(() => downloads.progressOf(props.itemId));
 const eta = computed(() => downloads.etaOf(props.itemId));
 const busy = computed(() => status.value !== null && status.value !== "completed" && status.value !== "failed");
+// En pause ou en échec : le bouton mène à la page Téléchargements (reprise à sa place dans la file).
 
 const label = computed(() => {
   switch (status.value) {
@@ -33,20 +34,22 @@ const label = computed(() => {
       const percent = `${Math.round((progress.value ?? 0) * 100)} %`;
       return eta.value !== null ? `${percent} · ${formatRemaining(eta.value)}` : percent;
     }
+    case "paused":
+      return "En pause";
     case "failed":
-      return "Réessayer";
+      return "Échec";
     default:
       return "Télécharger";
   }
 });
 
 async function onClick() {
-  if (busy.value || status.value === "completed") {
+  if (busy.value || status.value === "completed" || status.value === "failed") {
     await navigateTo("/downloads");
     return;
   }
   try {
-    await downloads.start(props.itemId, props.name, props.imageUrl);
+    downloads.request(props.itemId, props.name, props.imageUrl);
   } catch (e) {
     emit("error", `Téléchargement impossible : ${e instanceof Error ? e.message : e}`);
   }

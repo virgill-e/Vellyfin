@@ -33,6 +33,33 @@ export interface DownloadMeta {
   file: string | null;
   /** Vignette enregistrée localement (disponible hors ligne). */
   image: string | null;
+  subtitles: SubtitleFile[];
+  info: MediaInfo;
+  /** Taille du fichier final (0 tant qu'il n'est pas terminé). */
+  size: number;
+}
+
+export interface SubtitleFile {
+  index: number;
+  label: string;
+  language?: string | null;
+  path: string;
+}
+
+export interface MediaInfo {
+  kind?: string | null;
+  seriesId?: string | null;
+  seriesName?: string | null;
+  season?: number | null;
+  episode?: number | null;
+  runtimeTicks?: number | null;
+  /** Libellé de la piste audio téléchargée. */
+  audio?: string | null;
+}
+
+export interface DownloadUsage {
+  used: number;
+  free: number;
 }
 
 export interface DownloadRequest {
@@ -46,6 +73,8 @@ export interface DownloadRequest {
   variant: string;
   /** Vignette à enregistrer avec le téléchargement. */
   imageUrl?: string;
+  subtitles?: { index: number; label: string; language?: string; url: string }[];
+  info?: MediaInfo;
 }
 
 export const native = {
@@ -62,6 +91,7 @@ export const native = {
   downloadsList: () => invoke<DownloadMeta[]>("downloads_list"),
   downloadDelete: (serverId: string, userId: string, itemId: string) =>
     invoke<void>("download_delete", { serverId, userId, itemId }),
+  downloadsUsage: () => invoke<DownloadUsage>("downloads_usage"),
   onDownloadProgress: (handler: (p: DownloadProgress) => void): Promise<UnlistenFn> =>
     listen<DownloadProgress>("download-progress", (event) => handler(event.payload)),
 };

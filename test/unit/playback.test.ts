@@ -13,7 +13,7 @@ describe("audioTracks", () => {
     ] as MediaStream[];
     expect(audioTracks(streams)).toEqual([
       { index: 1, label: "Français - E-AC-3 - 5.1 - Par défaut" },
-      { index: 2, label: "eng" },
+      { index: 2, label: "eng", language: "eng" },
       { index: 3, label: "Piste 3" },
     ]);
   });

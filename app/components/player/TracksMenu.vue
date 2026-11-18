@@ -10,6 +10,8 @@ defineProps<{
   subtitleIndex: number | null;
   switching: boolean;
   offline: boolean;
+  /** Piste audio du fichier téléchargé. */
+  offlineAudio?: string | null;
 }>();
 defineEmits<{ audio: [index: number]; subtitle: [index: number | null]; close: [] }>();
 </script>
@@ -23,7 +25,10 @@ defineEmits<{ audio: [index: number]; subtitle: [index: number | null]; close: [
   >
     <section>
       <h2 class="mb-3 text-lg font-semibold">Audio</h2>
-      <p v-if="offline" class="text-sm text-zinc-500">Piste téléchargée uniquement.</p>
+      <p v-if="offline" class="text-sm text-zinc-300">
+        ✓ {{ offlineAudio ?? "Piste téléchargée" }}
+        <span class="mt-1 block text-xs text-zinc-500">Une seule langue par téléchargement.</span>
+      </p>
       <ul v-else class="flex flex-col">
         <li v-for="track in audioTracks" :key="track.index">
           <button
@@ -63,7 +68,7 @@ defineEmits<{ audio: [index: number]; subtitle: [index: number | null]; close: [
           </button>
         </li>
       </ul>
-      <p v-if="offline && !subtitles.length" class="mt-2 text-xs text-zinc-500">Les sous-titres ne sont pas encore téléchargés.</p>
+      <p v-if="offline && !subtitles.length" class="mt-2 text-xs text-zinc-500">Aucun sous-titre téléchargé avec ce fichier.</p>
     </section>
   </div>
 </template>

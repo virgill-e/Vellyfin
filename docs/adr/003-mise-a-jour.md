@@ -13,7 +13,9 @@ Plugin officiel `tauri-plugin-updater`, avec les Releases GitHub comme serveur d
 
 1. Le workflow **Build**, sur tag `v*`, construit les installeurs avec `createUpdaterArtifacts`, les signe avec la clé de mise à jour (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) et crée un **brouillon** de Release contenant `latest.json`.
 2. La publication du brouillon (action manuelle) rend la version visible : l'app interroge `releases/latest/download/latest.json`.
-3. L'app vérifie au démarrage puis toutes les 6 h, télécharge en arrière-plan, vérifie la signature avec la clé publique de `tauri.conf.json`, et propose de redémarrer. Elle n'interrompt jamais une lecture d'elle-même.
+3. **Mise à jour obligatoire au lancement** (depuis 0.5.0) : l'app vérifie avant de s'afficher (5 s au plus) ; si une version plus récente existe, elle la télécharge, vérifie la signature avec la clé publique de `tauri.conf.json`, l'installe et redémarre, sans choix possible. Sans réseau ou en cas d'erreur, l'app démarre normalement (les téléchargements restent lisibles hors ligne). Aucune vérification en cours d'utilisation, pour ne jamais couper une lecture.
+
+Jusqu'à 0.4.0, l'app vérifiait aussi toutes les 6 h et proposait de redémarrer (« Plus tard » possible) : ces versions passent à 0.5.0 de cette façon, puis les suivantes sont imposées.
 
 ## Conséquences
 

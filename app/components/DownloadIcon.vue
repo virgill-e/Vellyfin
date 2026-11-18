@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Icône d'état d'un téléchargement :
 // flèche (rien) · anneau qui tourne (en attente, finalisation) · anneau de progression
-// (téléchargement) · coche (terminé) · point d'exclamation (échec).
+// (téléchargement) · anneau gris et pause (en pause) · coche (terminé) · point d'exclamation (échec).
 const props = defineProps<{ status: string | null; progress?: number | null }>();
 
 const RADIUS = 9;
@@ -26,6 +26,20 @@ const offset = computed(() => CIRCUMFERENCE * (1 - Math.min(Math.max(props.progr
   >
     <circle cx="12" cy="12" :r="RADIUS" class="stroke-white/25" />
     <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round" />
+  </svg>
+
+  <svg v-else-if="status === 'paused'" viewBox="0 0 24 24" class="size-6 -rotate-90 fill-none stroke-2" aria-hidden="true">
+    <circle cx="12" cy="12" :r="RADIUS" class="stroke-white/25" />
+    <circle
+      cx="12"
+      cy="12"
+      :r="RADIUS"
+      class="stroke-zinc-400"
+      stroke-linecap="round"
+      :stroke-dasharray="CIRCUMFERENCE"
+      :stroke-dashoffset="offset"
+    />
+    <path d="M10 9v6M14 9v6" class="rotate-90 stroke-current" style="transform-origin: 12px 12px" stroke-linecap="round" />
   </svg>
 
   <svg v-else-if="status === 'downloading'" viewBox="0 0 24 24" class="size-6 -rotate-90 fill-none stroke-2" aria-hidden="true">
