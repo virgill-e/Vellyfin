@@ -13,6 +13,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/bebas-neue": "^5.3.0",
     "@jellyfin/sdk": "^1.0.2",
     "@pinia/nuxt": "^1.0.3",
     "@tauri-apps/api": "^2.12.5",
